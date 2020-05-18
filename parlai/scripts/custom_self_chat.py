@@ -69,7 +69,6 @@ def _run_self_chat_episode(opt, world, world_logger):
 
     num_parleys = math.ceil(num_turns / bsz)
     for _ in range(num_parleys):
-        world.agents[0].postMessage(12)
         world.parley()
         world_logger.log(world)
 

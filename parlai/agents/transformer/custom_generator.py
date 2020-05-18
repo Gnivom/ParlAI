@@ -40,17 +40,33 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
             )
         return model
 
+    def receiveMessage(self, messageObservation):
+        prevBatch = self.batchify([self.observation])
+        beam_size = self.beam_size
+        maxlen = self.label_truncate or 256
+        max_message = beam_size
+
+        n_best_beam_preds_scores, _ = self._generateOptions(
+            prevBatch, beam_size, maxlen, max_message
+        )
+
+        for i, (tokens, _) in enumerate(n_best_beam_preds_scores[0]):
+            text = self._v2t(tokens)
+            if messageObservation['text'] == text:
+                return i
+        return None
+
     def postMessage(self, message):
         self.pending_message = message
 
     def _get_pending_message(self, consume):
         """
-      :return:
-          tuple (message, max_message)
+            :return:
+                tuple (message, max_message)
 
-          - message: integer in [0, max_message)
-      """
-        max_message = 100
+                - message: integer in [0, max_message)
+        """
+        max_message = self.beam_size
         message = self.pending_message or 0
         if consume:
             self.pending_message = None
@@ -63,8 +79,26 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         assert beam_size >= max_message
         assert message < max_message
 
-        print(self.id, "sending message", message)
+        n_best_beam_preds_scores, beams = self._generateOptions(
+            batch, beam_size, max_ts, max_message
+        )
 
+        # get the top prediction for each beam (i.e. minibatch sample)
+        beam_preds_scores = [
+            n_best_list[message] for n_best_list in n_best_beam_preds_scores
+        ]
+
+        if self.opt.get('verbose'):
+            for i, beams in enumerate(n_best_beam_preds_scores):
+                for b, (tokens, score) in enumerate(beams):
+                    gen = self._v2t(tokens)
+                    logging.debug(f"Batch[{i:3d}] Beam[{b:3d}]: ({score:4.2f}): {gen}")
+                logging.debug('-')
+
+        return beam_preds_scores, beams
+
+    # Implementation taken from TorchGeneratorAgent._generate
+    def _generateOptions(self, batch, beam_size, max_ts, max_message):
         model = self.model
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = self.model.module
@@ -140,15 +174,4 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
                 batch, n_best_beam_preds_scores
             )
 
-        # get the top prediction for each beam (i.e. minibatch sample)
-        beam_preds_scores = [
-            n_best_list[message] for n_best_list in n_best_beam_preds_scores
-        ]
-        if self.opt.get('verbose'):
-            for i, beams in enumerate(n_best_beam_preds_scores):
-                for b, (tokens, score) in enumerate(beams):
-                    gen = self._v2t(tokens)
-                    logging.debug(f"Batch[{i:3d}] Beam[{b:3d}]: ({score:4.2f}): {gen}")
-                logging.debug('-')
-
-        return beam_preds_scores, beams
+        return n_best_beam_preds_scores, beams

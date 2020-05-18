@@ -11,6 +11,9 @@ from parlai.tasks.blended_skill_talk.agents import raw_data_path, safe_personas_
 from parlai.tasks.interactive.worlds import InteractiveWorld as InteractiveBaseWorld
 from parlai.tasks.self_chat.worlds import SelfChatWorld as SelfChatBaseWorld
 
+from parlai.core.worlds import validate
+from parlai.core.message import Message
+
 
 def get_contexts_data(opt, shared=None):
     if shared and 'contexts_data' in shared:
@@ -154,6 +157,7 @@ class InteractiveWorld(InteractiveBaseWorld):
 
 
 class SelfChatWorld(SelfChatBaseWorld):
+    @staticmethod
     def add_cmdline_args(argparser):
         parser = argparser.add_argument_group('BST SelfChat World')
         parser.add_argument(
@@ -169,6 +173,13 @@ class SelfChatWorld(SelfChatBaseWorld):
             help='Include context conversation at beginning or not',
         )
 
+    def __init__(self, opt, agents, shared=None):
+        super().__init__(opt, agents, shared)
+        self.observer_agents = []
+        for agent in self.agents:
+            observer = agent.clone()
+            self.observer_agents.append(observer)
+
     def init_contexts(self, shared=None):
         self.contexts_data = get_contexts_data(self.opt, shared=shared)
 
@@ -181,3 +192,77 @@ class SelfChatWorld(SelfChatBaseWorld):
         shared_data = super().share()
         shared_data['contexts_data'] = self.contexts_data
         return shared_data
+
+    # override
+    def parley(self):
+        if self.episode_done():
+            self.turn_cnt = 0
+            self.episode_cnt += 1
+            self.contexts = None
+            self.seed_utterances = None
+            agents = self.get_agents()
+            for a in agents:
+                a.reset()
+            for a in self.observer_agents:
+                a.reset()
+
+        if self.turn_cnt == 0:
+            self.acts = [None, None]
+            # get the beginning of the conversation, which can include contexts
+            # and/or any number of starting messages
+            self.contexts = self.get_contexts()
+            self.seed_utterances = self._get_seed_utt_acts(
+                self.episode_cnt, self.agents
+            )
+
+        if self.contexts:
+            assert len(self.contexts) == 2
+            # initial context
+            for i in range(0, 2):
+                context = Message(
+                    {'text': self.contexts[i], 'episode_done': False, 'id': 'context'}
+                )
+                self.acts[i] = context
+                self.agents[i].observe(validate(context))
+                self.observer_agents[i].observe(validate(context))
+            # clear contexts so they are only added once per episode
+            self.contexts = None
+        elif self.seed_utterances:
+            # pop the next two seed messages (there may be less or more than 2 total)
+            utts = self.seed_utterances[:2]
+            self.seed_utterances = self.seed_utterances[2:]
+            # process the turn
+            for i in [0, 1]:
+                # if we have a seed utterance, add it to the conversation
+                if len(utts) > i:
+                    self.acts[i] = utts[i]
+                    if hasattr(self.agents[i], 'self_observe'):
+                        self.agents[i].self_observe(self.acts[i])
+                        self.observer_agents[i].self_observe(self.acts[i])
+                else:
+                    self.acts[i] = self.agents[i].act()
+                    self.observer_agents[i].self_observe(self.acts[i])
+                self.agents[1 - i].observe(validate(self.acts[i]))
+                self.observer_agents[1 - i].observe(validate(self.acts[i]))
+        else:
+            # do regular loop
+            acts = self.acts
+            agents = self.agents
+
+            sendMessage = 12
+            print(self.id, "sending message", sendMessage)
+            agents[0].postMessage(sendMessage)
+            acts[0] = agents[0].act()
+            receivedMessage = self.observer_agents[0].receiveMessage(acts[0])
+            print(self.id, "received message", receivedMessage)
+            self.observer_agents[0].self_observe(acts[0])
+            agents[1].observe(validate(acts[0]))
+            self.observer_agents[1].observe(validate(acts[0]))
+
+            acts[1] = agents[1].act()
+            self.observer_agents[1].self_observe(acts[1])
+            agents[0].observe(validate(acts[1]))
+            self.observer_agents[0].observe(validate(acts[1]))
+
+        self.update_counters()
+        self.turn_cnt += 1
