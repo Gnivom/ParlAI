@@ -21,4 +21,4 @@ WORKDIR /service
 RUN git clone https://github.com/facebookresearch/ParlAI.git /service/ParlAI
 RUN cd /service/ParlAI; pip3 install ./requirements.txt; echo "" > README.md; python3 setup.py develop
 
-# python3 parlai/scripts/custom_self_chat.py -t custom_skill_talk -mf zoo:blender/blender_90M/model -m transformer/custom_generator --beam-size 100
+# python3 parlai/scripts/custom_self_chat.py -t custom_skill_talk -mf zoo:blender/blender_90M/model -m transformer/custom_generator --beam-size 20
