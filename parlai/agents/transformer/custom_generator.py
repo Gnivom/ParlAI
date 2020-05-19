@@ -57,6 +57,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         return None
 
     def postMessage(self, message):
+        assert self.pending_message is None
         self.pending_message = message
 
     def _get_pending_message(self, consume):
