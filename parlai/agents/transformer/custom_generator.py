@@ -13,7 +13,7 @@ import random
 import math
 from typing import List
 
-HIDDEN_MAX_MESSAGE = 256 * 100
+HIDDEN_MAX_MESSAGE = 256
 HIDDEN_STOP_SIGNAL = HIDDEN_MAX_MESSAGE
 
 
@@ -70,7 +70,7 @@ class StochasticSearch(TreeSearch):
         overlap = min(range1[1], range2[1]) - max(range1[0], range2[0])
         return max(0.0, overlap)
 
-    def _select_message(self, sprobs):
+    def _select_message_send(self, sprobs):
         #        for x in sprobs:
         #            assert (sprobs[0] == x)
 
@@ -86,13 +86,33 @@ class StochasticSearch(TreeSearch):
                 self.low + cumulative * remaining_size,
                 self.low + (cumulative + prob) * remaining_size,
             ]
-
-            # TODO: select best scaled_range, not first possible
+            # TODO: select best scaled_range, not first possible. (binary search?)
             if self.get_overlap(scaled_range, [low_message, high_message]) > 0.0:
                 self.low, self.high = scaled_range
                 return [i for _ in sprobs]
             cumulative += prob
         assert False, "There should have been overlap"
+
+    def _select_message_receive(self, sprobs, sinds):
+        #        anti_sinds = sinds[0, :].clone()
+        #        for i, x in enumerate(sinds[0, :]):
+        #            anti_sinds[x] = i
+
+        remaining_size = self.high - self.low
+
+        expected_token = self.expected_message[self.received_tokens]
+        self.received_tokens += 1
+        cumulative = 0.0
+        for i, prob in enumerate(sprobs[0]):
+            if sinds[0, i] == expected_token:
+                scaled_range = [
+                    self.low + cumulative * remaining_size,
+                    self.low + (cumulative + prob) * remaining_size,
+                ]
+                self.low, self.high = scaled_range
+                return [i for _ in sprobs]
+            cumulative += prob
+        assert False, "We should have found expected_token"
 
     def select_paths(self, logprobs, prior_scores, current_length):
         # Unlike the other treesearch methods, we have to switch to linspace
@@ -103,8 +123,10 @@ class StochasticSearch(TreeSearch):
         mask = (sprobs.cumsum(dim=-1) - sprobs) >= self.p
         sprobs[mask] = 0
         sprobs.div_(sprobs.sum(dim=-1).unsqueeze(1))
-        choices = torch.multinomial(sprobs, 1)[:, 0]
-        choices = self._select_message(sprobs)
+        if self.mode == "send":
+            choices = self._select_message_send(sprobs)
+        elif self.mode == "receive":
+            choices = self._select_message_receive(sprobs, sinds)
         hyp_ids = torch.arange(logprobs.size(0)).to(logprobs.device)
         tok_ids = sinds[hyp_ids, choices]
         # Convert back to logspace.
@@ -142,21 +164,21 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         return model
 
     def receiveMessage(self, messageObservation):
-        return None
         prevBatch = self.batchify([self.observation])
         beam_size = self.beam_size
         maxlen = self.label_truncate or 256
-        max_message = beam_size
 
-        n_best_beam_preds_scores, _ = self._generateOptions(
-            prevBatch, beam_size, maxlen, max_message
+        vectorizedObs = self.dict.txt2vec(messageObservation['text'])
+        vectorizedObs.append(self.END_IDX)
+
+        n_best_beam_preds_scores, beams = self._generateOptions(
+            prevBatch,
+            beam_size,
+            maxlen,
+            (lambda beam: beam.setReceiveMessage(vectorizedObs)),
         )
 
-        for i, (tokens, _) in enumerate(n_best_beam_preds_scores[0]):
-            text = self._v2t(tokens)
-            if messageObservation['text'] == text:
-                return i
-        return None
+        return beams[0].getCompletedMessageRange(HIDDEN_MAX_MESSAGE)
 
     def postMessage(self, message):
         assert self.pending_message is None
@@ -182,7 +204,10 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         assert message < max_message
 
         n_best_beam_preds_scores, beams = self._generateOptions(
-            batch, beam_size, max_ts, message, max_message
+            batch,
+            beam_size,
+            max_ts,
+            (lambda beam: beam.setSendMessage(message, max_message)),
         )
 
         # get the top prediction for each beam (i.e. minibatch sample)
@@ -212,7 +237,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         )
 
     # Implementation taken from TorchGeneratorAgent._generate
-    def _generateOptions(self, batch, beam_size, max_ts, message, max_message):
+    def _generateOptions(self, batch, beam_size, max_ts, beam_init):
         model = self.model
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = self.model.module
@@ -233,16 +258,13 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
                 self._treesearch_factory(dev)
                 .set_context(self._get_context(batch, batch_idx))
                 .set_blacklist(self.beam_blacklist)
-                .setSendMessage(message, max_message)
                 for batch_idx in range(batchsize)
             ]
         else:
-            beams = [
-                self._treesearch_factory(dev, message, max_message).setSendMessage(
-                    message, max_message
-                )
-                for _ in range(bsz)
-            ]
+            beams = [self._treesearch_factory(dev) for _ in range(bsz)]
+
+        for beam in beams:
+            beam_init(beam)
 
         # repeat encoder outputs and decoder inputs
         decoder_input = (
@@ -287,14 +309,11 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
             decoder_input = torch.cat([decoder_input, selection], dim=-1)
 
         # get all finalized candidates for each sample (and validate them)
-        n_best_beam_preds_scores = [b.get_rescored_finished(max_message) for b in beams]
+        n_best_beam_preds_scores = [b.get_rescored_finished() for b in beams]
 
         if hasattr(self, '_rerank_beams'):
             n_best_beam_preds_scores = self._rerank_beams(
                 batch, n_best_beam_preds_scores
             )
-
-        for beam in beams:
-            print(beam.getCompletedMessageRange(HIDDEN_MAX_MESSAGE))
 
         return n_best_beam_preds_scores, beams
