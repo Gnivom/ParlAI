@@ -1,4 +1,4 @@
-from parlai.core.torch_generator_agent import TorchGeneratorAgent
+from parlai.core.torch_generator_agent import TorchGeneratorAgent, TreeSearch
 from parlai.core.opt import Opt
 
 from .transformer import add_common_cmdline_args
@@ -10,6 +10,107 @@ import torch
 import torch.nn.functional as F
 
 import random
+import math
+from typing import List
+
+HIDDEN_MAX_MESSAGE = 256 * 100
+HIDDEN_STOP_SIGNAL = HIDDEN_MAX_MESSAGE
+
+
+class HiddenMessage:
+    def __init__(self, message: int):
+        self.message = message
+
+
+def bytes_to_messages(bts: bytes):
+    ret = []
+    for message in list(bts):
+        assert message < HIDDEN_MAX_MESSAGE
+        ret.append(HiddenMessage(message))
+    ret.append(HiddenMessage(HIDDEN_STOP_SIGNAL))
+    return ret
+
+
+def messages_to_bytes(messages: List[HiddenMessage]):
+    bts = []
+    for i, message in enumerate(messages):
+        if message.message == HIDDEN_STOP_SIGNAL:
+            return bytes(bts), messages[i + 1 :]
+        bts.append(message.message)
+    return None, messages
+
+
+# Inspired by Nucleus Search
+class StochasticSearch(TreeSearch):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.p = 1.0
+        self.mode = None
+        self.low = 0.0
+        self.high = 1.0
+
+    def setSendMessage(self, message: int, max_message: int):
+        self.mode = "send"
+        self.message = message
+        self.max_message = max_message
+        return self
+
+    # expected_message is a list of dictionary indices
+    def setReceiveMessage(self, expected_message):
+        self.mode = "receive"
+        self.expected_message = expected_message
+        self.received_tokens = 0
+        return self
+
+    def getCompletedMessageRange(self, max_message: int):
+        return math.floor(self.low * max_message), math.floor(self.high * max_message)
+
+    @staticmethod
+    def get_overlap(range1, range2):
+        overlap = min(range1[1], range2[1]) - max(range1[0], range2[0])
+        return max(0.0, overlap)
+
+    def _select_message(self, sprobs):
+        #        for x in sprobs:
+        #            assert (sprobs[0] == x)
+
+        low_message = self.message / self.max_message
+        high_message = (self.message + 1) / self.max_message
+
+        remaining_size = self.high - self.low
+
+        cumulative = 0.0
+        for i, prob in enumerate(sprobs[0]):
+            # range = [cumulative, cumulative + prob]
+            scaled_range = [
+                self.low + cumulative * remaining_size,
+                self.low + (cumulative + prob) * remaining_size,
+            ]
+
+            # TODO: select best scaled_range, not first possible
+            if self.get_overlap(scaled_range, [low_message, high_message]) > 0.0:
+                self.low, self.high = scaled_range
+                return [i for _ in sprobs]
+            cumulative += prob
+        assert False, "There should have been overlap"
+
+    def select_paths(self, logprobs, prior_scores, current_length):
+        # Unlike the other treesearch methods, we have to switch to linspace
+        # for the probabilities in order to compute the CDF.
+        probs = torch.softmax(logprobs, dim=-1)
+        sprobs, sinds = probs.sort(dim=-1, descending=True)
+        # TODO: pull request the subtraction?
+        mask = (sprobs.cumsum(dim=-1) - sprobs) >= self.p
+        sprobs[mask] = 0
+        sprobs.div_(sprobs.sum(dim=-1).unsqueeze(1))
+        choices = torch.multinomial(sprobs, 1)[:, 0]
+        choices = self._select_message(sprobs)
+        hyp_ids = torch.arange(logprobs.size(0)).to(logprobs.device)
+        tok_ids = sinds[hyp_ids, choices]
+        # Convert back to logspace.
+        scores = sprobs[hyp_ids, choices].log()
+        best_scores = prior_scores.expand_as(scores) + scores
+        return (hyp_ids, tok_ids, best_scores)
 
 
 class CustomGeneratorAgent(TorchGeneratorAgent):
@@ -41,6 +142,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         return model
 
     def receiveMessage(self, messageObservation):
+        return None
         prevBatch = self.batchify([self.observation])
         beam_size = self.beam_size
         maxlen = self.label_truncate or 256
@@ -67,7 +169,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
 
                 - message: integer in [0, max_message)
         """
-        max_message = self.beam_size
+        max_message = HIDDEN_MAX_MESSAGE
         message = self.pending_message or 0
         if consume:
             self.pending_message = None
@@ -77,17 +179,14 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
     def _generate(self, batch, beam_size, max_ts):
 
         message, max_message = self._get_pending_message(consume=True)
-        assert beam_size >= max_message
         assert message < max_message
 
         n_best_beam_preds_scores, beams = self._generateOptions(
-            batch, beam_size, max_ts, max_message
+            batch, beam_size, max_ts, message, max_message
         )
 
         # get the top prediction for each beam (i.e. minibatch sample)
-        beam_preds_scores = [
-            n_best_list[message] for n_best_list in n_best_beam_preds_scores
-        ]
+        beam_preds_scores = [n_best_list[0] for n_best_list in n_best_beam_preds_scores]
 
         if self.opt.get('verbose'):
             for i, beams in enumerate(n_best_beam_preds_scores):
@@ -98,8 +197,22 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
 
         return beam_preds_scores, beams
 
+    # override
+    def _treesearch_factory(self, device):
+        return StochasticSearch(
+            beam_size=self.beam_size,
+            min_length=0,
+            block_ngram=self.beam_block_ngram,
+            context_block_ngram=self.beam_context_block_ngram,
+            length_penalty=self.opt.get('beam_length_penalty', 0.65),
+            padding_token=self.NULL_IDX,
+            bos_token=self.START_IDX,
+            eos_token=self.END_IDX,
+            device=device,
+        )
+
     # Implementation taken from TorchGeneratorAgent._generate
-    def _generateOptions(self, batch, beam_size, max_ts, max_message):
+    def _generateOptions(self, batch, beam_size, max_ts, message, max_message):
         model = self.model
         if isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = self.model.module
@@ -120,10 +233,16 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
                 self._treesearch_factory(dev)
                 .set_context(self._get_context(batch, batch_idx))
                 .set_blacklist(self.beam_blacklist)
+                .setSendMessage(message, max_message)
                 for batch_idx in range(batchsize)
             ]
         else:
-            beams = [self._treesearch_factory(dev) for _ in range(bsz)]
+            beams = [
+                self._treesearch_factory(dev, message, max_message).setSendMessage(
+                    message, max_message
+                )
+                for _ in range(bsz)
+            ]
 
         # repeat encoder outputs and decoder inputs
         decoder_input = (
@@ -174,5 +293,8 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
             n_best_beam_preds_scores = self._rerank_beams(
                 batch, n_best_beam_preds_scores
             )
+
+        for beam in beams:
+            print(beam.getCompletedMessageRange(HIDDEN_MAX_MESSAGE))
 
         return n_best_beam_preds_scores, beams

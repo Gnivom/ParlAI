@@ -249,7 +249,7 @@ class SelfChatWorld(SelfChatBaseWorld):
             acts = self.acts
             agents = self.agents
 
-            sendMessage = random.randint(0, self.agents[0].beam_size - 1)
+            sendMessage = random.randint(0, 255)
             print(self.id, "sending message", sendMessage)
             agents[0].postMessage(sendMessage)
             acts[0] = agents[0].act()
@@ -259,7 +259,7 @@ class SelfChatWorld(SelfChatBaseWorld):
             agents[1].observe(validate(acts[0]))
             self.observer_agents[1].observe(validate(acts[0]))
 
-            sendMessage = random.randint(0, self.agents[1].beam_size - 1)
+            sendMessage = random.randint(0, 255)
             print(self.id, "sending message", sendMessage)
             agents[1].postMessage(sendMessage)
             acts[1] = agents[1].act()
