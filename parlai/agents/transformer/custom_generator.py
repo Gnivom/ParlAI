@@ -87,7 +87,19 @@ class StochasticSearch(TreeSearch):
                 self.low + (cumulative + prob) * remaining_size,
             ]
             # TODO: select best scaled_range, not first possible. (binary search?)
-            if self.get_overlap(scaled_range, [low_message, high_message]) > 0.0:
+            overlap = self.get_overlap(scaled_range, [low_message, high_message])
+            if overlap > 0.0:
+                if i < sprobs.size(1) - 1:
+                    next_scaled_range = [
+                        scaled_range[1],
+                        scaled_range[1] + sprobs[0, i + 1] * remaining_size,
+                    ]
+                    nextOverlap = self.get_overlap(
+                        next_scaled_range, [low_message, high_message]
+                    )
+                    if nextOverlap / sprobs[0, i + 1] > overlap / prob:
+                        self.low, self.high = next_scaled_range
+                        return [i + 1 for _ in sprobs]
                 self.low, self.high = scaled_range
                 return [i for _ in sprobs]
             cumulative += prob
