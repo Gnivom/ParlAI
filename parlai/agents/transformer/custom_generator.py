@@ -14,8 +14,8 @@ import math
 from fractions import Fraction
 from typing import List
 
-HIDDEN_MAX_MESSAGE = 256 ** 8
-HIDDEN_STOP_SIGNAL = HIDDEN_MAX_MESSAGE
+HIDDEN_MAX_MESSAGE = 256
+HIDDEN_STOP_SIGNAL = 0
 
 
 class HiddenMessage:
@@ -23,11 +23,14 @@ class HiddenMessage:
         self.message = message
 
 
+def empty_messages():
+    return [HiddenMessage(HIDDEN_STOP_SIGNAL)]
+
+
 def bytes_to_messages(bts: bytes):
     ret = []
     for message in list(bts):
-        assert message < HIDDEN_MAX_MESSAGE
-        ret.append(HiddenMessage(message))
+        ret.append(HiddenMessage(1 + message))
     ret.append(HiddenMessage(HIDDEN_STOP_SIGNAL))
     return ret
 
@@ -37,15 +40,39 @@ def messages_to_bytes(messages: List[HiddenMessage]):
     for i, message in enumerate(messages):
         if message.message == HIDDEN_STOP_SIGNAL:
             return bytes(bts), messages[i + 1 :]
-        bts.append(message.message)
+        bts.append(message.message - 1)
     return None, messages
 
 
+def messages_to_fraction(messages):
+    message = 0
+    denominator = 1
+    for m in messages:
+        message *= HIDDEN_MAX_MESSAGE + 1
+        message += m.message
+        denominator *= HIDDEN_MAX_MESSAGE + 1
+    return message, denominator
+
+
+def fraction_to_messages(message, denominator):
+    messages = []
+    while denominator > 1:
+        assert denominator % (HIDDEN_MAX_MESSAGE + 1) == 0
+        messages.append(HiddenMessage(message % (HIDDEN_MAX_MESSAGE + 1)))
+        message = message // (HIDDEN_MAX_MESSAGE + 1)
+        denominator = denominator // (HIDDEN_MAX_MESSAGE + 1)
+    messages.reverse()
+    return messages
+
+
+assert messages_to_bytes(bytes_to_messages(b'Hello, World!')) == (b'Hello, World!', [])
+
+
 # Inspired by Nucleus Search
-class StochasticSearch(TreeSearch):
-    def __init__(self, *args, **kwargs):
+class CustomSearch(TreeSearch):
+    def __init__(self, topp, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.p = 1.0
+        self.p = topp
         self.mode = None
         self.low = Fraction(0)
         self.high = Fraction(1)
@@ -65,12 +92,23 @@ class StochasticSearch(TreeSearch):
         self.received_tokens = 0
         return self
 
-    def getCompletedMessageRange(self, max_message: int):
+    def hasCompletedMessage(self, denominator):
         low, high = (
-            math.floor(self.low * (max_message + 1)),
-            math.floor(self.high * (max_message + 1)),
+            math.floor(self.low * denominator),
+            math.floor(self.high * denominator),
         )
-        return low, high, math.log2(1 + high - low)
+        return low == high
+
+    def getCompletedMessage(self, denominator):
+        assert self.hasCompletedMessage(denominator)
+        return math.floor(self.low * denominator)
+
+    def getMessageRemainder(self):
+        return (self.low, self.high)
+
+    def continueFromRemainder(self, remainder):
+        self.low, self.high = remainder
+        return self
 
     @staticmethod
     def get_overlap(range1, range2):
@@ -134,7 +172,8 @@ class StochasticSearch(TreeSearch):
 class CustomGeneratorAgent(TorchGeneratorAgent):
     def __init__(self, opt: Opt, shared=None):
         super().__init__(opt, shared)
-        self.pending_message = None
+        self.pending_messages = None
+        self.remainder = None
 
     @classmethod
     def add_cmdline_args(cls, argparser):
@@ -167,43 +206,56 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         vectorizedObs = self.dict.txt2vec(messageObservation['text'])
         vectorizedObs.append(self.END_IDX)
 
+        def initBeam(beam):
+            beam.setReceiveMessage(vectorizedObs)
+            if self.remainder is not None:
+                beam.continueFromRemainder(self.remainder)
+
         n_best_beam_preds_scores, beams = self._generateOptions(
-            prevBatch,
-            beam_size,
-            maxlen,
-            (lambda beam: beam.setReceiveMessage(vectorizedObs)),
+            prevBatch, beam_size, maxlen, initBeam
         )
 
-        return beams[0].getCompletedMessageRange(HIDDEN_MAX_MESSAGE)
+        self.remainder = None
 
-    def postMessage(self, message):
-        assert self.pending_message is None
-        self.pending_message = message
+        denominator = 1
+        while True:
+            denominator *= HIDDEN_MAX_MESSAGE + 1
+            if beams[0].hasCompletedMessage(denominator):
+                message = beams[0].getCompletedMessage(denominator)
+                messages = fraction_to_messages(message, denominator)
+                if messages[-1].message == HIDDEN_STOP_SIGNAL:
+                    bts, remainder = messages_to_bytes(messages)
+                    assert remainder == []
+                    return bts
+            else:
+                self.remainder = beams[0].getMessageRemainder()
+                return None
+
+    def postMessage(self, message: bytes):
+        assert self.pending_messages is None
+        self.pending_messages = bytes_to_messages(message)
 
     def _get_pending_message(self, consume):
-        """
-            :return:
-                tuple (message, max_message)
-
-                - message: integer in [0, max_message)
-        """
-        max_message = HIDDEN_MAX_MESSAGE
-        message = self.pending_message or 0
+        messages = self.pending_messages or empty_messages()
         if consume:
-            self.pending_message = None
-        return message, max_message
+            self.pending_messages = None
+
+        message, denominator = messages_to_fraction(messages)
+        return message, denominator - 1
 
     # override from TorchGeneratorAgent
     def _generate(self, batch, beam_size, max_ts):
 
-        message, max_message = self._get_pending_message(consume=True)
-        assert message < max_message
+        message, max_message = self._get_pending_message(consume=False)
+        assert message <= max_message
+
+        def initBeam(beam):
+            beam.setSendMessage(message, max_message)
+            if self.remainder is not None:
+                beam.continueFromRemainder(self.remainder)
 
         n_best_beam_preds_scores, beams = self._generateOptions(
-            batch,
-            beam_size,
-            max_ts,
-            (lambda beam: beam.setSendMessage(message, max_message)),
+            batch, beam_size, max_ts, initBeam
         )
 
         # get the top prediction for each beam (i.e. minibatch sample)
@@ -216,11 +268,18 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
                     logging.debug(f"Batch[{i:3d}] Beam[{b:3d}]: ({score:4.2f}): {gen}")
                 logging.debug('-')
 
+        if beams[0].hasCompletedMessage(max_message + 1):
+            self._get_pending_message(consume=True)
+            self.remainder = None
+        else:
+            self.remainder = beams[0].getMessageRemainder()
+
         return beam_preds_scores, beams
 
     # override
     def _treesearch_factory(self, device):
-        return StochasticSearch(
+        return CustomSearch(
+            self.opt['topp'],
             beam_size=self.beam_size,
             min_length=0,
             block_ngram=self.beam_block_ngram,

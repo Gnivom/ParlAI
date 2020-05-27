@@ -250,11 +250,10 @@ class SelfChatWorld(SelfChatBaseWorld):
             acts = self.acts
             agents = self.agents
 
-            max_message = 256 ** 8 - 1
-
-            sendMessage = random.randint(0, max_message)
-            print(agents[0].id, "sending message", sendMessage)
-            agents[0].postMessage(sendMessage)
+            if agents[0].remainder is None:
+                sendMessage = b'Super mega secret message'
+                print(agents[0].id, "sending message", sendMessage)
+                agents[0].postMessage(sendMessage)
             acts[0] = agents[0].act()
             print(
                 display_messages(
@@ -266,14 +265,15 @@ class SelfChatWorld(SelfChatBaseWorld):
                 )
             )
             receivedMessage = self.observer_agents[0].receiveMessage(acts[0])
-            print(agents[1].id, "received message", receivedMessage)
+            if receivedMessage is not None:
+                print(agents[1].id, "received message", receivedMessage)
             self.observer_agents[0].self_observe(acts[0])
             agents[1].observe(validate(acts[0]))
             self.observer_agents[1].observe(validate(acts[0]))
 
-            sendMessage = random.randint(0, max_message)
-            print(agents[1].id, "sending message", sendMessage)
-            agents[1].postMessage(sendMessage)
+            # sendMessage = random.randint(0, max_message)
+            # print(agents[1].id, "sending message", sendMessage)
+            # agents[1].postMessage(sendMessage)
             acts[1] = agents[1].act()
             print(
                 display_messages(
@@ -285,7 +285,7 @@ class SelfChatWorld(SelfChatBaseWorld):
                 )
             )
             receivedMessage = self.observer_agents[1].receiveMessage(acts[1])
-            print(agents[0].id, "received message", receivedMessage)
+            #            print(agents[0].id, "received message", receivedMessage)
             self.observer_agents[1].self_observe(acts[1])
             agents[0].observe(validate(acts[1]))
             self.observer_agents[0].observe(validate(acts[1]))
