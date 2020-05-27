@@ -13,6 +13,7 @@ from parlai.tasks.self_chat.worlds import SelfChatWorld as SelfChatBaseWorld
 
 from parlai.core.worlds import validate
 from parlai.core.message import Message
+from parlai.utils.misc import display_messages
 
 
 def get_contexts_data(opt, shared=None):
@@ -249,22 +250,42 @@ class SelfChatWorld(SelfChatBaseWorld):
             acts = self.acts
             agents = self.agents
 
-            sendMessage = random.randint(0, 255)
-            print(self.id, "sending message", sendMessage)
+            max_message = 256 ** 8 - 1
+
+            sendMessage = random.randint(0, max_message)
+            print(agents[0].id, "sending message", sendMessage)
             agents[0].postMessage(sendMessage)
             acts[0] = agents[0].act()
+            print(
+                display_messages(
+                    [acts[0]],
+                    ignore_fields=self.opt.get('display_ignore_fields', ''),
+                    prettify=self.opt.get('display_prettify', False),
+                    max_len=self.opt.get('max_display_len', 1000),
+                    verbose=self.opt.get('display_verbose', False),
+                )
+            )
             receivedMessage = self.observer_agents[0].receiveMessage(acts[0])
-            print(self.id, "received message", receivedMessage)
+            print(agents[1].id, "received message", receivedMessage)
             self.observer_agents[0].self_observe(acts[0])
             agents[1].observe(validate(acts[0]))
             self.observer_agents[1].observe(validate(acts[0]))
 
-            sendMessage = random.randint(0, 255)
-            print(self.id, "sending message", sendMessage)
+            sendMessage = random.randint(0, max_message)
+            print(agents[1].id, "sending message", sendMessage)
             agents[1].postMessage(sendMessage)
             acts[1] = agents[1].act()
+            print(
+                display_messages(
+                    [acts[1]],
+                    ignore_fields=self.opt.get('display_ignore_fields', ''),
+                    prettify=self.opt.get('display_prettify', False),
+                    max_len=self.opt.get('max_display_len', 1000),
+                    verbose=self.opt.get('display_verbose', False),
+                )
+            )
             receivedMessage = self.observer_agents[1].receiveMessage(acts[1])
-            print(self.id, "received message", receivedMessage)
+            print(agents[0].id, "received message", receivedMessage)
             self.observer_agents[1].self_observe(acts[1])
             agents[0].observe(validate(acts[1]))
             self.observer_agents[0].observe(validate(acts[1]))

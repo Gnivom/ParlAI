@@ -11,9 +11,10 @@ import torch.nn.functional as F
 
 import random
 import math
+from fractions import Fraction
 from typing import List
 
-HIDDEN_MAX_MESSAGE = 256
+HIDDEN_MAX_MESSAGE = 256 ** 8
 HIDDEN_STOP_SIGNAL = HIDDEN_MAX_MESSAGE
 
 
@@ -46,13 +47,15 @@ class StochasticSearch(TreeSearch):
         super().__init__(*args, **kwargs)
         self.p = 1.0
         self.mode = None
-        self.low = 0.0
-        self.high = 1.0
+        self.low = Fraction(0)
+        self.high = Fraction(1)
 
     def setSendMessage(self, message: int, max_message: int):
         self.mode = "send"
         self.message = message
         self.max_message = max_message
+        #        self.rand_message = random.uniform(message/(max_message+1), (message+1)/(max_message+1))
+        self.rand_message = (Fraction(1, 2) + message) / (max_message + 1)
         return self
 
     # expected_message is a list of dictionary indices
@@ -63,7 +66,11 @@ class StochasticSearch(TreeSearch):
         return self
 
     def getCompletedMessageRange(self, max_message: int):
-        return math.floor(self.low * max_message), math.floor(self.high * max_message)
+        low, high = (
+            math.floor(self.low * (max_message + 1)),
+            math.floor(self.high * (max_message + 1)),
+        )
+        return low, high, math.log2(1 + high - low)
 
     @staticmethod
     def get_overlap(range1, range2):
@@ -71,59 +78,36 @@ class StochasticSearch(TreeSearch):
         return max(0.0, overlap)
 
     def _select_message_send(self, sprobs):
-        #        for x in sprobs:
-        #            assert (sprobs[0] == x)
-
-        low_message = self.message / self.max_message
-        high_message = (self.message + 1) / self.max_message
-
         remaining_size = self.high - self.low
+        message = (self.rand_message - self.low) / remaining_size
 
         cumulative = 0.0
         for i, prob in enumerate(sprobs[0]):
-            # range = [cumulative, cumulative + prob]
-            scaled_range = [
-                self.low + cumulative * remaining_size,
-                self.low + (cumulative + prob) * remaining_size,
-            ]
-            # TODO: select best scaled_range, not first possible. (binary search?)
-            overlap = self.get_overlap(scaled_range, [low_message, high_message])
-            if overlap > 0.0:
-                if i < sprobs.size(1) - 1:
-                    next_scaled_range = [
-                        scaled_range[1],
-                        scaled_range[1] + sprobs[0, i + 1] * remaining_size,
-                    ]
-                    nextOverlap = self.get_overlap(
-                        next_scaled_range, [low_message, high_message]
-                    )
-                    if nextOverlap / sprobs[0, i + 1] > overlap / prob:
-                        self.low, self.high = next_scaled_range
-                        return [i + 1 for _ in sprobs]
-                self.low, self.high = scaled_range
-                return [i for _ in sprobs]
+            prob = float(prob) / self.p
             cumulative += prob
+            if cumulative > message:
+                self.low, self.high = (
+                    self.low + Fraction(cumulative - prob) * remaining_size,
+                    self.low + Fraction(cumulative) * remaining_size,
+                )
+                return [i for _ in sprobs]
         assert False, "There should have been overlap"
 
     def _select_message_receive(self, sprobs, sinds):
-        #        anti_sinds = sinds[0, :].clone()
-        #        for i, x in enumerate(sinds[0, :]):
-        #            anti_sinds[x] = i
-
         remaining_size = self.high - self.low
 
         expected_token = self.expected_message[self.received_tokens]
         self.received_tokens += 1
         cumulative = 0.0
         for i, prob in enumerate(sprobs[0]):
-            if sinds[0, i] == expected_token:
-                scaled_range = [
-                    self.low + cumulative * remaining_size,
-                    self.low + (cumulative + prob) * remaining_size,
-                ]
-                self.low, self.high = scaled_range
-                return [i for _ in sprobs]
+            prob = float(prob) / self.p
             cumulative += prob
+            if sinds[0, i] == expected_token:
+                self.low, self.high = (
+                    self.low + Fraction(cumulative - prob) * remaining_size,
+                    self.low + Fraction(cumulative) * remaining_size,
+                )
+                return [i for _ in sprobs]
         assert False, "We should have found expected_token"
 
     def select_paths(self, logprobs, prior_scores, current_length):
