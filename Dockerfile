@@ -15,6 +15,7 @@ RUN apt-get install gcc
 #RUN sh cuda_10.2.89_440.33.01_linux.run
 
 RUN pip3 install torch torchvision
+RUN pip3 install tornado
 
 WORKDIR /service
 
@@ -22,3 +23,8 @@ RUN git clone https://github.com/facebookresearch/ParlAI.git /service/ParlAI
 RUN cd /service/ParlAI; pip3 install ./requirements.txt; echo "" > README.md; python3 setup.py develop
 
 # python3 parlai/scripts/custom_self_chat.py -t custom_skill_talk -mf zoo:blender/blender_90M/model -m transformer/custom_generator --beam-size 20
+
+# cd parlai/chat_service/services/browser_chat
+# python3 run.py --config-path ../../tasks/chatbot/config.yml --port 10001
+# <SEPARATE TERMINAL> python3 client.py --port 10001
+

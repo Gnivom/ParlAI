@@ -250,45 +250,37 @@ class SelfChatWorld(SelfChatBaseWorld):
             acts = self.acts
             agents = self.agents
 
-            if agents[0].remainder is None:
-                sendMessage = b'Super mega secret message'
-                print(agents[0].id, "sending message", sendMessage)
-                agents[0].postMessage(sendMessage)
-            acts[0] = agents[0].act()
-            print(
-                display_messages(
-                    [acts[0]],
-                    ignore_fields=self.opt.get('display_ignore_fields', ''),
-                    prettify=self.opt.get('display_prettify', False),
-                    max_len=self.opt.get('max_display_len', 1000),
-                    verbose=self.opt.get('display_verbose', False),
+            for my_idx in range(2):
+                other_idx = 1 - my_idx
+                if (
+                    agents[my_idx].remainder is None
+                    and agents[other_idx].remainder is None
+                ):
+                    sendMessage = (
+                        b'What is the password?'
+                        if my_idx == 0
+                        else b'It is very secret.'
+                    )
+                    print(agents[my_idx].id, "sending message", sendMessage)
+                    agents[my_idx].postMessage(sendMessage)
+                acts[my_idx] = agents[my_idx].act()
+                print(
+                    display_messages(
+                        [acts[my_idx]],
+                        ignore_fields=self.opt.get('display_ignore_fields', ''),
+                        prettify=self.opt.get('display_prettify', False),
+                        max_len=self.opt.get('max_display_len', 1000),
+                        verbose=self.opt.get('display_verbose', False),
+                    )
                 )
-            )
-            receivedMessage = self.observer_agents[0].receiveMessage(acts[0])
-            if receivedMessage is not None:
-                print(agents[1].id, "received message", receivedMessage)
-            self.observer_agents[0].self_observe(acts[0])
-            agents[1].observe(validate(acts[0]))
-            self.observer_agents[1].observe(validate(acts[0]))
-
-            # sendMessage = random.randint(0, max_message)
-            # print(agents[1].id, "sending message", sendMessage)
-            # agents[1].postMessage(sendMessage)
-            acts[1] = agents[1].act()
-            print(
-                display_messages(
-                    [acts[1]],
-                    ignore_fields=self.opt.get('display_ignore_fields', ''),
-                    prettify=self.opt.get('display_prettify', False),
-                    max_len=self.opt.get('max_display_len', 1000),
-                    verbose=self.opt.get('display_verbose', False),
+                receivedMessage = self.observer_agents[my_idx].receiveMessage(
+                    acts[my_idx]
                 )
-            )
-            receivedMessage = self.observer_agents[1].receiveMessage(acts[1])
-            #            print(agents[0].id, "received message", receivedMessage)
-            self.observer_agents[1].self_observe(acts[1])
-            agents[0].observe(validate(acts[1]))
-            self.observer_agents[0].observe(validate(acts[1]))
+                if receivedMessage is not None and receivedMessage != b'':
+                    print(agents[other_idx].id, "received message", receivedMessage)
+                self.observer_agents[my_idx].self_observe(acts[my_idx])
+                agents[other_idx].observe(validate(acts[my_idx]))
+                self.observer_agents[other_idx].observe(validate(acts[my_idx]))
 
         self.update_counters()
         self.turn_cnt += 1
