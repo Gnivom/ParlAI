@@ -16,6 +16,7 @@ RUN apt-get install gcc
 
 RUN pip3 install torch torchvision
 RUN pip3 install tornado
+RUN pip3 install subword-nmt
 
 WORKDIR /service
 
