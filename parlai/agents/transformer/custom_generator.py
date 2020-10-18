@@ -199,6 +199,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         return model
 
     def receiveMessage(self, messageObservation):
+        self.model.eval() # Disable (non-deterministic) Dropout, etc.
         prevBatch = self.batchify([self.observation])
         beam_size = self.beam_size
         maxlen = self.label_truncate or 256

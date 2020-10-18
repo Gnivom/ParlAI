@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-# Copyright (c) Facebook, Inc. and its affiliates.
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
 """
 Allows a model to self-chat on a given task.
 """
@@ -19,7 +16,7 @@ import random
 def setup_args(parser=None):
     if parser is None:
         parser = ParlaiParser(True, True, 'Self chat with a model')
-    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--seed', type=int, default=41)
     parser.add_argument('-d', '--display-examples', type='bool', default=True)
     parser.add_argument(
         '--display-ignore-fields',
