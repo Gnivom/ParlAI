@@ -312,7 +312,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
             beams = [
                 self._treesearch_factory(dev)
                 .set_context(self._get_context(batch, batch_idx))
-                .set_blacklist(self.beam_blacklist)
+                .set_block_list(self.beam_block_list)
                 for batch_idx in range(batchsize)
             ]
         else:
