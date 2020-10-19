@@ -153,7 +153,6 @@ class CustomSearch(TreeSearch):
         # for the probabilities in order to compute the CDF.
         probs = torch.softmax(logprobs, dim=-1)
         sprobs, sinds = probs.sort(dim=-1, descending=True)
-        # TODO: pull request the subtraction?
         mask = (sprobs.cumsum(dim=-1) - sprobs) >= self.p
         sprobs[mask] = 0
         sprobs.div_(sprobs.sum(dim=-1).unsqueeze(1))
