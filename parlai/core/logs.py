@@ -14,11 +14,12 @@ extended to any other tool like visdom.
    tensorboard --logdir <PARLAI_DATA/tensorboard> --port 8888.
 """
 
-import os
 import json
 import numbers
 from parlai.core.opt import Opt
 from parlai.core.metrics import Metric
+from parlai.utils.io import PathManager
+import parlai.utils.logging as logging
 
 
 class TensorboardLogger(object):
@@ -50,9 +51,9 @@ class TensorboardLogger(object):
             raise ImportError('Please run `pip install tensorboard tensorboardX`.')
 
         tbpath = opt['model_file'] + '.tensorboard'
-        print('[ Saving tensorboard logs to: {} ]'.format(tbpath))
-        if not os.path.exists(tbpath):
-            os.makedirs(tbpath)
+        logging.debug(f'Saving tensorboard logs to: {tbpath}')
+        if not PathManager.exists(tbpath):
+            PathManager.mkdirs(tbpath)
         self.writer = SummaryWriter(tbpath, comment=json.dumps(opt))
 
     def log_metrics(self, setting, step, report):
@@ -72,7 +73,7 @@ class TensorboardLogger(object):
             elif isinstance(v, Metric):
                 self.writer.add_scalar(f'{k}/{setting}', v.value(), global_step=step)
             else:
-                print(f'k {k} v {v} is not a number')
+                logging.error(f'k {k} v {v} is not a number')
 
     def flush(self):
         self.writer.flush()
