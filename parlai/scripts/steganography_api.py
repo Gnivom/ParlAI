@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
-"""
-Allows a model to self-chat on a given task.
-"""
+# An API exposing the information embedding of the stego_generator
+
 import parlai
 from parlai.core.params import ParlaiParser
 from parlai.core.agents import create_agent
