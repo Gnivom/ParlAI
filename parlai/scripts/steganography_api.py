@@ -66,8 +66,8 @@ def setup(seed: int) -> None:
     parser = setup_args()
     opt = {}
     opt['model_file'] = 'zoo:blender/blender_90M/model'
-    opt['model'] = 'transformer/custom_generator'
-    opt['override'] = {'model': 'transformer/custom_generator'} # Overrideing from model_file's default
+    opt['model'] = 'transformer/stego_generator'
+    opt['override'] = {'model': 'transformer/stego_generator'} # Overrideing from model_file's default
     opt['beam-size'] = '1' # We don't use beam search, so more than 1 is useless
     opt['display_examples'] = 'False'
     opt['topp'] = 1.0 # Number of candidate words is limited to as few as possible with total probability >= p

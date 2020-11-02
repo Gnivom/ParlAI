@@ -1,3 +1,5 @@
+# This file is transformer.py copied, with major changes to embed information in the choice of message
+
 from parlai.core.torch_generator_agent import TorchGeneratorAgent, TreeSearch
 from parlai.core.opt import Opt
 
@@ -17,11 +19,9 @@ from typing import List
 HIDDEN_MAX_MESSAGE = 256
 HIDDEN_STOP_SIGNAL = 0
 
-
 class HiddenMessage:
     def __init__(self, message: int):
         self.message = message
-
 
 def empty_messages():
     return [HiddenMessage(HIDDEN_STOP_SIGNAL)]
@@ -69,7 +69,7 @@ assert messages_to_bytes(bytes_to_messages(b'Hello, World!')) == (b'Hello, World
 
 
 # Inspired by Nucleus Search
-class CustomSearch(TreeSearch):
+class StegoSearch(TreeSearch):
     def __init__(self, topp, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.p = topp
@@ -168,7 +168,7 @@ class CustomSearch(TreeSearch):
         return (hyp_ids, tok_ids, best_scores)
 
 
-class CustomGeneratorAgent(TorchGeneratorAgent):
+class StegoGeneratorAgent(TorchGeneratorAgent):
     def __init__(self, opt: Opt, shared=None):
         super().__init__(opt, shared)
         self.pending_messages = None
@@ -183,7 +183,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
         add_common_cmdline_args(agent)
         cls.dictionary_class().add_cmdline_args(argparser)
 
-        super(CustomGeneratorAgent, cls).add_cmdline_args(argparser)
+        super(StegoGeneratorAgent, cls).add_cmdline_args(argparser)
         return agent
 
     def build_model(self, states=None):
@@ -278,7 +278,7 @@ class CustomGeneratorAgent(TorchGeneratorAgent):
 
     # override
     def _treesearch_factory(self, device):
-        return CustomSearch(
+        return StegoSearch(
             self.opt['topp'],
             beam_size=self.beam_size,
             min_length=0,

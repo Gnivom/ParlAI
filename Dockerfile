@@ -18,8 +18,6 @@ RUN pip3 install torch torchvision
 RUN pip3 install tornado
 RUN pip3 install subword-nmt
 
-# python3 parlai/scripts/custom_self_chat.py -t custom_skill_talk -mf zoo:blender/blender_90M/model -m transformer/custom_generator --beam-size 20 --display_examples False --selfchat_max_turns 20
-
 # cd parlai/chat_service/services/browser_chat
 # python3 run.py --config-path ../../tasks/chatbot/config.yml --port 10001
 # <SEPARATE TERMINAL> python3 client.py --port 10001
