@@ -18,11 +18,6 @@ RUN pip3 install torch torchvision
 RUN pip3 install tornado
 RUN pip3 install subword-nmt
 
-WORKDIR /service
-
-RUN git clone https://github.com/facebookresearch/ParlAI.git /service/ParlAI
-RUN cd /service/ParlAI; pip3 install -r ./requirements.txt; echo "" > README.md; python3 setup.py develop
-
 # python3 parlai/scripts/custom_self_chat.py -t custom_skill_talk -mf zoo:blender/blender_90M/model -m transformer/custom_generator --beam-size 20 --display_examples False --selfchat_max_turns 20
 
 # cd parlai/chat_service/services/browser_chat

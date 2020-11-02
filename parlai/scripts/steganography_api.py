@@ -51,6 +51,10 @@ class State:
 
 state = None
 
+##############################
+### API starts here!
+##############################
+
 def reset() -> None:
     global state
     state = None
@@ -127,31 +131,3 @@ def receive_stegotext(agent_id: int, text: str) -> bytes:
     else:
         return secret
 
-seed = 12345
-cleartext = b'The password is secret'
-
-# Send
-setup(seed)
-my_id = create_agent(True)
-other_id = create_agent(False)
-
-secret_index = post_secret(my_id, cleartext)
-
-stegotexts = []
-
-while(has_pending_message(my_id)):
-    stegotexts.append(send_stegotext(my_id))
-
-reset()
-
-# Receive
-setup(seed)
-other_id = create_agent(False)
-my_id = create_agent(True)
-
-responses = []
-
-for stegotext in stegotexts:
-    responses.append(receive_stegotext(other_id, stegotext))
-
-assert(responses[-1] == cleartext)
