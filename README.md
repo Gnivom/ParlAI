@@ -14,8 +14,15 @@ This fork is currently based off of ParlAI `v0.9.3` tag on Github.
 
 # How to use
 
-## Dependencies
+## Dependencies and Setup
 
+```
+cd Parlai
+pip3 install -r ./requirements.txt
+python3 setup.py develop
+```
+
+### If it doesn't work
 This project requires all the same dependencies as the version of ParlAI it is based on, no more or less. I recommend checking the guide in their [README](https://github.com/facebookresearch/ParlAI/blob/v0.9.3/README.md) for installation and setup.
 
 ## API
