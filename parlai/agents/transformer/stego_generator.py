@@ -121,7 +121,7 @@ class StegoSearch(TreeSearch):
 
         cumulative = 0.0
         for i, prob in enumerate(sprobs[0]):
-            prob = float(prob) / self.p
+            prob = float(prob)
             cumulative += prob
             if cumulative > message:
                 self.low, self.high = (
@@ -138,7 +138,7 @@ class StegoSearch(TreeSearch):
         self.received_tokens += 1
         cumulative = 0.0
         for i, prob in enumerate(sprobs[0]):
-            prob = float(prob) / self.p
+            prob = float(prob)
             cumulative += prob
             if sinds[0, i] == expected_token:
                 self.low, self.high = (
@@ -279,7 +279,7 @@ class StegoGeneratorAgent(TorchGeneratorAgent):
     # override
     def _treesearch_factory(self, device):
         return StegoSearch(
-            self.opt['topp'],
+            self.opt['stego_topp'],
             beam_size=self.beam_size,
             min_length=0,
             block_ngram=self.beam_block_ngram,

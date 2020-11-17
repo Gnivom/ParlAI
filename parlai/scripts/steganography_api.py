@@ -69,7 +69,7 @@ def setup(seed: int) -> None:
     opt['override'] = {'model': 'transformer/stego_generator'} # Overrideing from model_file's default
     opt['beam-size'] = '1' # We don't use beam search, so more than 1 is useless
     opt['display_examples'] = 'False'
-    opt['topp'] = 1.0 # Number of candidate words is limited to as few as possible with total probability >= p
+    opt['stego_topp'] = 0.9 # Number of candidate words is limited to as few as possible with total probability >= p
     random.seed(seed)
     state = State(opt)
     state.agents = []
@@ -119,12 +119,13 @@ def receive_stegotext(agent_id: int, text: str) -> bytes:
     assert(state.agents is not None and len(state.agents) > agent_id) # Unknown agent otherwise
     assert(not state.agent_ownership[agent_id]) # Can only receive stegotext for non-owned agents
     
-    secret = state.agents[agent_id].receiveMessage({'text': text})
+    observation = {'text': text, 'episode_done': False}
+    secret = state.agents[agent_id].receiveMessage(observation)
     for i, agent in enumerate(state.agents):
         if i == agent_id:
-            agent.self_observe(validate({'text': text}))
+            agent.self_observe(validate(observation))
         else:
-            agent.observe(validate({'text': text}))
+            agent.observe(validate(observation))
     if secret is None:
         return None
     else:
