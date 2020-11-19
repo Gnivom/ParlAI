@@ -12,8 +12,13 @@ from parlai.utils.misc import TimeLogger
 import math
 import random
 import os
+import csv
 
-def setup_args(parser=None):
+##############################
+### Helpers!
+##############################
+
+def _setup_args(parser=None):
     parser = ParlaiParser(True, True, 'Steganography bot argument parser')
     parser.add_argument('-d', '--display-examples', type='bool', default=True)
     parser.add_argument(
@@ -41,6 +46,25 @@ def setup_args(parser=None):
 #    WorldLogger.add_cmdline_args(parser)
     return parser
 
+def _read_options_from_settings(opt, settings_file):
+    assert settings_file.mode == 'r'
+    settings = csv.reader(settings_file)
+
+    for row in settings:
+        name, value = row
+        if name == 'seed':
+            random.seed(int(value))
+        elif name == 'model_file':
+            opt['model_file'] = value
+        elif name == 'model':
+            opt['model'] = value
+            opt['override']['model'] = value # Overrideing from model_file's default
+        elif name == 'topp':
+            opt['stego_topp'] = float(value) # Number of candidate words is limited to as few as possible with total probability >= p
+        else:
+            print("Unknown setting: ", name)
+            assert False
+
 class State:
     def __init__(self, opt):
         self.agents = None
@@ -58,19 +82,17 @@ def reset() -> None:
     global state
     state = None
 
-def setup(seed: int) -> None:
+def setup(settings_file) -> None:
     global state
     assert(state is None) # Must call reset() otherwise
 
-    parser = setup_args()
+    parser = _setup_args()
     opt = {}
-    opt['model_file'] = 'zoo:blender/blender_90M/model'
-    opt['model'] = 'transformer/stego_generator'
-    opt['override'] = {'model': 'transformer/stego_generator'} # Overrideing from model_file's default
-    opt['beam-size'] = '1' # We don't use beam search, so more than 1 is useless
+    opt['override'] = {}
     opt['display_examples'] = 'False'
-    opt['stego_topp'] = 0.9 # Number of candidate words is limited to as few as possible with total probability >= p
-    random.seed(seed)
+    opt['beam-size'] = '1' # We don't use beam search, so more than 1 is redundant
+    _read_options_from_settings(opt, settings_file)
+
     state = State(opt)
     state.agents = []
     state.agent_ownership = []

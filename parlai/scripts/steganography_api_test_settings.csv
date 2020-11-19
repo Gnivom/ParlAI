@@ -1,0 +1,4 @@
+model_file,zoo:blender/blender_90M/model
+model,transformer/stego_generator
+topp,0.9
+seed,1234

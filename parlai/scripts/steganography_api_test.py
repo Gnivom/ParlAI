@@ -1,12 +1,14 @@
 from steganography_api import reset, setup, create_agent, post_secret, has_pending_message, send_stegotext, receive_stegotext
 
+import os
+
 print("Starting test")
 
-seed = 12345
+settings_file = os.path.join(os.path.dirname(__file__), 'steganography_api_test_settings.csv')
 cleartext = b'The password is secret'
 
 # Send (on one device)
-setup(seed)
+setup(open(settings_file, 'r'))
 my_agent = create_agent(True)
 other_agent = create_agent(False)
 
@@ -20,7 +22,7 @@ while(has_pending_message(my_agent)):
 reset()
 
 # Receive (on another device)
-setup(seed)
+setup(open(settings_file, 'r'))
 other_agent = create_agent(False)
 my_agent = create_agent(True)
 
