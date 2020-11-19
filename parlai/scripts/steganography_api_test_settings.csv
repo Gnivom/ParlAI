@@ -1,4 +1,5 @@
 model_file,zoo:blender/blender_90M/model
 model,transformer/stego_generator
 topp,0.9
+context,home made ice cream
 seed,1234

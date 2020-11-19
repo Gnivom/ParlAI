@@ -61,6 +61,8 @@ def _read_options_from_settings(opt, settings_file):
             opt['override']['model'] = value # Overrideing from model_file's default
         elif name == 'topp':
             opt['stego_topp'] = float(value) # Number of candidate words is limited to as few as possible with total probability >= p
+        elif name == 'context':
+            opt['stego_context'] = value
         else:
             print("Unknown setting: ", name)
             assert False
@@ -104,7 +106,7 @@ def create_agent(is_owned: bool) -> int:
     agent = parlai.core.agents.create_agent(state.opt, requireModelExists=True)
     agent_id = len(state.agents)
     agent.id = agent.id + '_' + str(agent_id)
-    agent.observe(validate({'episode_done': False, 'id': 'context', 'text': 'Star Wars'})) # TODO
+    agent.observe(validate({'episode_done': False, 'id': 'context', 'text': state.opt['stego_context']}))
     state.agents.append(agent)
     state.agent_ownership.append(is_owned)
     state.num_sent_secrets.append(0)
