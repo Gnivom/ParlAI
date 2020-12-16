@@ -56,9 +56,9 @@ def _read_options_from_settings(opt, settings_file):
             random.seed(int(value))
         elif name == 'model_file':
             opt['model_file'] = value
-        elif name == 'model':
-            opt['model'] = value
-            opt['override']['model'] = value # Overrideing from model_file's default
+        elif name in ['model', 'no_cuda', 'fp16', 'fp16_impl']:
+            opt[name] = value
+            opt['override'][name] = value # Overrideing from model_file's default
         elif name == 'topp':
             opt['stego_topp'] = float(value) # Number of candidate words is limited to as few as possible with total probability >= p
         elif name == 'context':
@@ -92,7 +92,7 @@ def setup(settings_file) -> None:
     opt = {}
     opt['override'] = {}
     opt['display_examples'] = 'False'
-    opt['beam-size'] = '1' # We don't use beam search, so more than 1 is redundant
+    opt['beam_size'] = '1' # We don't use beam search, so more than 1 is redundant
     _read_options_from_settings(opt, settings_file)
 
     state = State(opt)
