@@ -2,9 +2,11 @@
 
 Here we list projects undertaken in the ParlAI framework that are shared publicly, either in the form of papers, public tasks (with leaderboards) and/or shared model code.
 
-This directory also contains subfolders for some of the projects which are housed in the ParlAI repo, others are maintained via external websites. Please also refer to ParlAI's [agents](https://github.com/facebookresearch/ParlAI/tree/master/parlai/tasks), [tasks](https://github.com/facebookresearch/ParlAI/tree/master/parlai/agents) and [model zoo](https://github.com/facebookresearch/ParlAI/tree/master/parlai/zoo) for what else is in ParlAI.
+This directory also contains subfolders for some of the projects which are housed in the ParlAI repo, others are maintained via external websites. Please also refer to ParlAI's [agents](https://github.com/facebookresearch/ParlAI/tree/master/parlai/agents), [tasks](https://github.com/facebookresearch/ParlAI/tree/master/parlai/tasks) and [model zoo](https://github.com/facebookresearch/ParlAI/tree/master/parlai/zoo) for what else is in ParlAI.
 
 ## Generative Models
+
+- **Style-Controlled Generation** [[project]](https://github.com/facebookresearch/ParlAI/tree/master/projects/style_gen) [[paper]](https://arxiv.org/abs/2009.10855) _Tasks and models for training and evaluating generative models conditioned on a style token_
 
 - **Unlikelihood Training for Consistent Dialogue** [[project]](https://parl.ai/projects/dialogue_unlikelihood/).
   _Methods to reduce copies & repeats, correct vocab usage, and avoiding contradiction via unlikelihood training._
@@ -33,7 +35,10 @@ This directory also contains subfolders for some of the projects which are house
   _A new data collection and model evaluation tool, a Messenger-based Chatbot game called Beat the Bot._
 
 
-## Chit-chat
+## Open-domain Dialogue
+
+- **Addressing Contradictions in Dialogue Modeling** [[project]](https://parl.ai/projects/contradiction).
+  _A new task for contradiction detection and its use for non-contradicting generation._
 
 - **Recipes for open-domain chatbots** [[project]](https://parl.ai/projects/recipes).
   _We open source 90M, 2.7B and 9.4B parameter generative models fine-tuned on [BST](https://parl.ai/projects/bst/)._
@@ -59,11 +64,18 @@ _Task & models for chitchat with a given persona._
 
 ## Well-Behaved
 
-- **Dialogue Safety** [[project]](https://parl.ai/projects/dialogue_safety/) [[paper]](https://arxiv.org/abs/1908.06083).
+- **Recipes for Safety in Open-Domain Chatbots** [[project]](https://parl.ai/projects/safety_recipes/) [[paper]](https://arxiv.org/abs/2010.07079).
+  _Methods for improving the safety of open-domain chatbots._
+
+- **Build-It Break-It Fix-It for Dialogue Safety** [[project]](https://parl.ai/projects/dialogue_safety/) [[paper]](https://arxiv.org/abs/1908.06083).
   _Task and method for improving the detection of offensive language in the context of dialogue._
 
-- **Mitigating Genderation Bias** [[project]](https://parl.ai/projects/genderation_bias/).
+- **Multi-Dimensional Gender Bias Classification** [[project]](https://parl.ai/projects/md_gender/) [[paper]](https://arxiv.org/abs/2005.00614)
+  _Training fine-grained gender bias classifiers to identify gender bias in text._
+
+- **Mitigating Genderation Bias** [[project]](https://parl.ai/projects/genderation_bias/) [[paper]](https://arxiv.org/abs/1911.03842).
   _Analysis and methods for mitigating gender bias in dialogue generation, using LIGHT as a testbed._
+
 
 ## Knowledge Grounded
 
@@ -72,11 +84,14 @@ _Task & models for chitchat with a given persona._
 
 ## Visually Grounded
 
+- **Multi-Modal BlenderBot** [[project]](https://github.com/facebookresearch/ParlAI/tree/master/projects/multimodal_blenderbot/) [[paper]](https://arxiv.org/abs/2010.01082). _Model for multi-modal dialogue about both images and chitchat._
+
 - **Image Chat** [[paper]](https://klshuster.github.io/image_chat/) [[task]](https://github.com/facebookresearch/ParlAI/tree/master/parlai/tasks/image_chat).
   _Task for personality-based engaging dialogue on images._
 
 - **Personality-Captions** [[project]](http://parl.ai/projects/personality_captions/) [[paper]](https://arxiv.org/abs/1810.10665).
   _Task for personality-based engaging comments on images._
+
 
 ## Environment Grounded
 

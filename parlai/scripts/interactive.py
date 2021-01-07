@@ -42,10 +42,10 @@ def setup_args(parser=None):
         'examples with text candidates',
     )
     parser.add_argument(
-        '--display-ignore-fields',
+        '--display-add-fields',
         type=str,
-        default='label_candidates,text_candidates',
-        help='Do not display these fields',
+        default='',
+        help='Display these fields when verbose is off (e.g., "--display-add-fields label_candidates,beam_texts")',
     )
     parser.add_argument(
         '-it',
@@ -69,8 +69,8 @@ def setup_args(parser=None):
         help='Format to save logs in. conversations is a jsonl format, parlai is a text format.',
     )
     parser.set_defaults(interactive_mode=True, task='interactive')
-    LocalHumanAgent.add_cmdline_args(parser)
-    WorldLogger.add_cmdline_args(parser)
+    LocalHumanAgent.add_cmdline_args(parser, partial_opt=None)
+    WorldLogger.add_cmdline_args(parser, partial_opt=None)
     return parser
 
 

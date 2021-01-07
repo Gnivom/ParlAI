@@ -324,7 +324,13 @@ def create_agent_from_opt_file(opt: Opt):
         if k not in opt_from_file:
             opt_from_file[k] = v
 
-    opt_from_file['model_file'] = model_file  # update model file path
+    # update model file path to the one set by opt
+    opt_from_file['model_file'] = model_file
+    # update init model path to the one set by opt
+    # NOTE: this step is necessary when for example the 'init_model' is
+    # set by the Train Loop (as is the case when loading from checkpoint)
+    if opt.get('init_model') is not None:
+        opt_from_file['init_model'] = opt['init_model']
 
     # update dict file path
     if not opt_from_file.get('dict_file'):
@@ -358,7 +364,7 @@ def add_datapath_and_model_args(opt: Opt):
     # add model args if they are missing
     model = get_model_name(opt)
     if model is not None:
-        parser.add_model_subargs(model)
+        parser.add_model_subargs(model, opt)
     opt_parser = parser.parse_args("")
     for k, v in opt_parser.items():
         if k not in opt:

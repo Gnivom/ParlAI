@@ -51,7 +51,7 @@ class TestWizardModel(unittest.TestCase):
         parser.set_defaults(**END2END_OPTIONS)
         opt = parser.parse_args([])
         opt['num_examples'] = 1
-        opt['display_verbose'] = True
+        opt['verbose'] = True
         display_data.display_data(opt)
 
     def test_end2end(self):
@@ -76,7 +76,7 @@ class TestKnowledgeRetriever(unittest.TestCase):
         from parlai.core.params import ParlaiParser
 
         parser = ParlaiParser(False, False)
-        KnowledgeRetrieverAgent.add_cmdline_args(parser)
+        KnowledgeRetrieverAgent.add_cmdline_args(parser, partial_opt=None)
         parser.set_params(
             model='projects:wizard_of_wikipedia:knowledge_retriever',
             add_token_knowledge=True,

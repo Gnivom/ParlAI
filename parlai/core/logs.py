@@ -14,6 +14,8 @@ extended to any other tool like visdom.
    tensorboard --logdir <PARLAI_DATA/tensorboard> --port 8888.
 """
 
+from typing import Optional
+from parlai.core.params import ParlaiParser
 import json
 import numbers
 from parlai.core.opt import Opt
@@ -27,12 +29,14 @@ class TensorboardLogger(object):
     Log objects to tensorboard.
     """
 
-    @staticmethod
-    def add_cmdline_args(argparser):
+    @classmethod
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
         """
         Add tensorboard CLI args.
         """
-        logger = argparser.add_argument_group('Tensorboard Arguments')
+        logger = parser.add_argument_group('Tensorboard Arguments')
         logger.add_argument(
             '-tblog',
             '--tensorboard-log',
@@ -41,6 +45,15 @@ class TensorboardLogger(object):
             help="Tensorboard logging of metrics, default is %(default)s",
             hidden=False,
         )
+        logger.add_argument(
+            '-tblogdir',
+            '--tensorboard-logdir',
+            type=str,
+            default=None,
+            help="Tensorboard logging directory, defaults to model_file.tensorboard",
+            hidden=False,
+        )
+        return parser
 
     def __init__(self, opt: Opt):
         try:
@@ -50,7 +63,11 @@ class TensorboardLogger(object):
         except ImportError:
             raise ImportError('Please run `pip install tensorboard tensorboardX`.')
 
-        tbpath = opt['model_file'] + '.tensorboard'
+        if opt['tensorboard_logdir'] is not None:
+            tbpath = opt['tensorboard_logdir']
+        else:
+            tbpath = opt['model_file'] + '.tensorboard'
+
         logging.debug(f'Saving tensorboard logs to: {tbpath}')
         if not PathManager.exists(tbpath):
             PathManager.mkdirs(tbpath)

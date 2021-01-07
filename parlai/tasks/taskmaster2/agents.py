@@ -11,6 +11,7 @@ No official train/valid/test splits are available as of 2020-05-18, so we make o
 splits.
 """
 
+from parlai.core.params import ParlaiParser
 import os
 import pandas as pd
 import hashlib
@@ -23,6 +24,7 @@ import json
 import parlai.utils.logging as logging
 from typing import Optional, Tuple
 from parlai.core.message import Message
+from parlai.utils.io import PathManager
 
 import parlai.tasks.taskmaster2.build as build_
 
@@ -47,9 +49,18 @@ class _Abstract(DialogTeacher):
     """
 
     @classmethod
-    def add_cmdline_args(cls, argparser):
-        argparser.add_argument('--include-ontology', type=bool, default=False)
-        return argparser
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
+        parser.add_argument('--include-ontology', type=bool, default=False)
+        parser.add_argument(
+            '--domains',
+            nargs='+',
+            default=DOMAINS,
+            choices=DOMAINS,
+            help='Uses last passed in configuration.',
+        )
+        return parser
 
     def __init__(self, opt: Opt, shared=None):
         self.fold = opt['datatype'].split(':')[0]
@@ -77,13 +88,13 @@ class _Abstract(DialogTeacher):
     def _normalize_annotation(self, anno):
         return anno
 
-    def _load_data(self, fold):
+    def _load_data(self, fold, domains):
         # load up the ontology
         ontology = {}
-        for section in DOMAINS:
+        for section in domains:
             parts = []
             fn = os.path.join(self.dpath, section + '.onto.json')
-            with open(fn, 'r') as f:
+            with PathManager.open(fn, 'r') as f:
                 o = json.load(f)
             assert len(o) == 1
             o = list(o.values())[0]
@@ -96,8 +107,9 @@ class _Abstract(DialogTeacher):
             ontology[section] = ' ; '.join(parts)
 
         chunks = []
-        for section in DOMAINS:
-            subset = pd.read_json(os.path.join(self.dpath, section + '.json'))
+        for section in domains:
+            with PathManager.open(os.path.join(self.dpath, section + '.json')) as f:
+                subset = pd.read_json(f)
             subset['domain'] = section
             chunks.append(subset)
         chunks = pd.concat(chunks, axis=0)
@@ -171,6 +183,9 @@ class _Abstract(DialogTeacher):
                     f'{domain}_slot_r',
                     AverageMetric(correct, len(teacher_action['slots'])),
                 )
+                self.metrics.add(
+                    'jga', AverageMetric(correct == len(teacher_action['slots']))
+                )
 
         elif teacher_action['type'] == 'apiresp':
             # keep track of statistics by domain
@@ -193,8 +208,9 @@ class _Abstract(DialogTeacher):
             self.metrics.add(f'{domain}_delex_bleu', bleu_metric)
 
     def setup_data(self, fold):
+        domains = self.opt.get('domains', DOMAINS)
+        chunks = self._load_data(fold, domains)
         domains_cnt = Counter()
-        chunks = self._load_data(fold)
         for _, row in chunks.iterrows():
             domains_cnt[row['domain']] += 1
             first = True
@@ -309,20 +325,22 @@ class FewShotTeacher(_Abstract):
     """
 
     @classmethod
-    def add_cmdline_args(cls, argparser):
-        argparser.add_argument(
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
+        parser.add_argument(
             '--holdout',
             default=DOMAINS[0],
             choices=DOMAINS,
             help='Domain which is held out from test',
         )
-        argparser.add_argument(
+        parser.add_argument(
             '--n-shot',
             default=100,
             type=int,
             help='Number of few shot examples to provide in training fold.',
         )
-        return super().add_cmdline_args(argparser)
+        return super().add_cmdline_args(parser, partial_opt=partial_opt)
 
     def _label_fold(self, chunks):
         folds = []

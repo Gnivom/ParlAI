@@ -19,6 +19,7 @@ Contains the following main utilities:
 See below for documentation on each specific tool.
 """
 
+from parlai.core.params import ParlaiParser
 from typing import Dict, Any, Union, List, Tuple, Optional
 from abc import ABC, abstractmethod
 import random
@@ -28,7 +29,7 @@ from torch import optim
 
 from parlai.core.opt import Opt
 from parlai.core.agents import Agent
-from parlai.core.dict import DictionaryAgent
+from parlai.core.dict import DictionaryAgent, TokenizationMode
 from parlai.nn.lr_scheduler import ParlAILRScheduler
 from parlai.core.message import Message
 from parlai.utils.distributed import is_distributed
@@ -424,11 +425,13 @@ class TorchAgent(ABC, Agent):
         return History
 
     @classmethod
-    def add_cmdline_args(cls, argparser):
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
         """
         Add the default commandline args we expect most agents to want.
         """
-        agent = argparser.add_argument_group('TorchAgent Arguments')
+        agent = parser.add_argument_group('TorchAgent Arguments')
         agent.add_argument(
             '-i',
             '--interactive-mode',
@@ -669,9 +672,9 @@ class TorchAgent(ABC, Agent):
             help='disable GPUs even if available. otherwise, will use GPUs if '
             'available on the device.',
         )
-
-        cls.dictionary_class().add_cmdline_args(argparser)
-        ParlAILRScheduler.add_cmdline_args(argparser)
+        cls.dictionary_class().add_cmdline_args(parser, partial_opt=partial_opt)
+        ParlAILRScheduler.add_cmdline_args(parser, partial_opt=partial_opt)
+        return parser
 
     def __init__(self, opt: Opt, shared=None):
         """
@@ -865,7 +868,7 @@ class TorchAgent(ABC, Agent):
 
         Made easily overridable for special cases.
         """
-        if self.opt.get('special_tok_lst') is not None:
+        if self.opt.get('special_tok_lst'):
             return self.opt['special_tok_lst'].split(',')
         return []
 
@@ -1661,7 +1664,18 @@ class TorchAgent(ABC, Agent):
             # make sure we note that we're expecting a reply in the future
             self.__expecting_to_reply = True
 
+        # keep around the observation for updating history based on label
         self.observation = observation
+
+        # possibly change tokenization methodology based on if this is a
+        # training example
+        is_training_mode = 'labels' in observation
+        if hasattr(self.dict, 'set_tokenization_mode'):
+            if is_training_mode:
+                self.dict.set_tokenization_mode(TokenizationMode.TRAIN_TIME_TEXT)
+            else:
+                self.dict.set_tokenization_mode(TokenizationMode.TEST_TIME_TEXT)
+
         # Update the history using the observation.
         # We may also consider adding a temporary string to the history
         # using the `get_temp_history()` function: this string will
@@ -1669,6 +1683,13 @@ class TorchAgent(ABC, Agent):
         self.history.update_history(
             observation, temp_history=self.get_temp_history(observation)
         )
+
+        if hasattr(self.dict, 'set_tokenization_mode'):
+            if is_training_mode:
+                self.dict.set_tokenization_mode(TokenizationMode.TRAIN_TIME_LABEL)
+            else:
+                self.dict.set_tokenization_mode(TokenizationMode.TEST_TIME_LABEL)
+
         return self.vectorize(
             observation,
             self.history,
@@ -1875,6 +1896,22 @@ class TorchAgent(ABC, Agent):
     def upgrade_opt(cls, opt_from_disk: Opt):
         # call the parent upgrades
         opt_from_disk = super(TorchAgent, cls).upgrade_opt(opt_from_disk)
+
+        if 'hf_skip_special_tokens' in opt_from_disk:
+            # 2020-10-28: we killed the --hf-skip-special-tokens option
+            if (
+                opt_from_disk['hf_skip_special_tokens']
+                and opt_from_disk.get('special_tok_lst')
+                and opt_from_disk.get('tokenizer') == 'bytelevelbpe'
+            ):
+                # but only warn about it in cases it might have been used.
+                warn_once(
+                    "Model was previously trained with --hf-skip-special-tokens true "
+                    "but this option is no longer supported. If you had extra tokens "
+                    "as part of a label and relied on this behavior, you may have to "
+                    "retrain your models with special tokens absent from labels."
+                )
+            del opt_from_disk['hf_skip_special_tokens']
 
         if opt_from_disk.get('fp16'):
             # 2020-01-28 If the model was trained with fp16, we might not have saved

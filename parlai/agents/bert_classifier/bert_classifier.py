@@ -8,12 +8,11 @@
 BERT classifier agent uses bert embeddings to make an utterance-level classification.
 """
 
+from typing import Optional
+from parlai.core.params import ParlaiParser
+from parlai.core.opt import Opt
 from parlai.agents.bert_ranker.bert_dictionary import BertDictionaryAgent
-from parlai.agents.bert_ranker.helpers import (
-    BertWrapper,
-    get_bert_optimizer,
-    MODEL_PATH,
-)
+from parlai.agents.bert_ranker.helpers import BertWrapper, MODEL_PATH
 from parlai.core.torch_agent import History
 from parlai.core.torch_classifier_agent import TorchClassifierAgent
 from parlai.utils.misc import warn_once
@@ -81,12 +80,14 @@ class BertClassifierAgent(TorchClassifierAgent):
         """
         return BertClassifierHistory
 
-    @staticmethod
-    def add_cmdline_args(parser):
+    @classmethod
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
         """
         Add CLI args.
         """
-        TorchClassifierAgent.add_cmdline_args(parser)
+        super().add_cmdline_args(parser, partial_opt=partial_opt)
         parser = parser.add_argument_group('BERT Classifier Arguments')
         parser.add_argument(
             '--type-optimization',
@@ -116,6 +117,7 @@ class BertClassifierAgent(TorchClassifierAgent):
             'segment with [SEP] token in between',
         )
         parser.set_defaults(dict_maxexs=0)  # skip building dictionary
+        return parser
 
     @staticmethod
     def dictionary_class():
@@ -145,14 +147,6 @@ class BertClassifierAgent(TorchClassifierAgent):
         """
         num_classes = len(self.class_list)
         return BertWrapper(BertModel.from_pretrained(self.pretrained_path), num_classes)
-
-    def init_optim(self, params, optim_states=None, saved_optim_type=None):
-        """
-        Initialize the optimizer.
-        """
-        self.optimizer = get_bert_optimizer(
-            [self.model], self.opt['type_optimization'], self.opt['learningrate']
-        )
 
     def _set_text_vec(self, *args, **kwargs):
         obs = super()._set_text_vec(*args, **kwargs)

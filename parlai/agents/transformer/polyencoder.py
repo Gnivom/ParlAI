@@ -8,12 +8,16 @@
 Poly-encoder Agent.
 """
 
+from parlai.core.params import ParlaiParser
 from typing import Any, Dict, Optional, Tuple
 
 import torch
 
 from parlai.core.opt import Opt
 from parlai.core.torch_ranker_agent import TorchRankerAgent
+from parlai.utils.misc import recursive_getattr
+from parlai.utils.logging import logging
+
 from .biencoder import AddLabelFixedCandsTRA
 from .modules import (
     BasicAttention,
@@ -33,12 +37,14 @@ class PolyencoderAgent(TorchRankerAgent):
     """
 
     @classmethod
-    def add_cmdline_args(cls, argparser):
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
         """
         Add command-line arguments specifically for this agent.
         """
-        TransformerRankerAgent.add_cmdline_args(argparser)
-        agent = argparser.add_argument_group('Polyencoder Arguments')
+        TransformerRankerAgent.add_cmdline_args(parser, partial_opt=partial_opt)
+        agent = parser.add_argument_group('Polyencoder Arguments')
         agent.add_argument(
             '--polyencoder-type',
             type=str,
@@ -236,6 +242,35 @@ class PolyencoderAgent(TorchRankerAgent):
             state_dict['codes'] = self.model.codes
         super().load_state_dict(state_dict)
 
+    def _resize_token_embeddings(self, state_dict, msg=None):
+        """
+        Resize the token embeddings when adding extra special tokens.
+
+        H/t TransformerGenerator._resize_token_embeddings for inspiration.
+        """
+        # map extra special tokens carefully
+        new_size = self.model.encoder_ctxt.embeddings.weight.size()[0]
+        orig_size = state_dict['encoder_ctxt.embeddings.weight'].size()[0]
+        logging.info(f'Resizing token embeddings from {orig_size} to {new_size}')
+        if new_size <= orig_size:
+            # new size should be greater than original size,
+            # as we are adding special tokens
+            raise RuntimeError(msg)
+
+        for emb_weights in [
+            'encoder_ctxt.embeddings.weight',
+            'encoder_cand.embeddings.weight',
+        ]:
+            # get new_embs
+            old_embs = state_dict[emb_weights]
+            new_embs = recursive_getattr(self.model, emb_weights).to(old_embs.device)
+            # copy over old weights
+            new_embs.data[:orig_size, :] = old_embs.data[:orig_size, :]
+            # reset in state dict
+            state_dict[emb_weights] = new_embs
+
+        return state_dict
+
 
 class PolyEncoderModule(torch.nn.Module):
     """
@@ -379,7 +414,7 @@ class PolyEncoderModule(torch.nn.Module):
         if isinstance(attention_layer, PolyBasicAttention):
             return attention_layer(queries, keys, mask_ys=mask, values=values)
         elif isinstance(attention_layer, MultiHeadAttention):
-            return attention_layer(queries, keys, values, mask)
+            return attention_layer(queries, keys, values, mask)[0]
         else:
             raise Exception('Unrecognized type of attention')
 
@@ -563,9 +598,12 @@ class IRFriendlyPolyencoderAgent(AddLabelFixedCandsTRA, PolyencoderAgent):
     """
 
     @classmethod
-    def add_cmdline_args(cls, argparser):
+    def add_cmdline_args(
+        cls, parser: ParlaiParser, partial_opt: Optional[Opt] = None
+    ) -> ParlaiParser:
         """
         Add cmd line args.
         """
-        AddLabelFixedCandsTRA.add_cmdline_args(argparser)
-        PolyencoderAgent.add_cmdline_args(argparser)
+        AddLabelFixedCandsTRA.add_cmdline_args(parser, partial_opt=partial_opt)
+        PolyencoderAgent.add_cmdline_args(parser, partial_opt=partial_opt)
+        return parser

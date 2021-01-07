@@ -196,7 +196,7 @@ def setup_args(parser=None) -> ParlaiParser:
         help='Report micro-averaged metrics instead of macro averaged metrics.',
         recommended=False,
     )
-    TensorboardLogger.add_cmdline_args(parser)
+    TensorboardLogger.add_cmdline_args(parser, partial_opt=None)
 
     parser = setup_dict_args(parser)
     return parser
@@ -516,7 +516,8 @@ class TrainLoop:
             cnt = valid_world.report().get('exs') or 0
 
         valid_report = valid_world.report()
-        valid_world.reset()  # make sure world doesn't remember valid data
+        if opt.get('validation_share_agent', False):
+            valid_world.reset()  # make sure world doesn't remember valid data
 
         return valid_report
 
